@@ -1,0 +1,201 @@
+A PSEUDOCODE USED BEFORE WRITING THE ACTUAL WRITER
+
+CONFIGURATION
+=============
+core: &'a Exlex<'a>                => Exlex parsed data
+arena: String                        => String that every keys and values be pushed into and other vectors to hold references from
+
+KEYS WITH 1:1 relation Group (1)
+================================
+updated_keys_vals: Vec<[usize; 2]>   => References to arena of each keys that user updated [NOT NEW]
+updated_keys_hashes: Vec<u64>        => Hashes of keys that were updated by the user
+updated_key_indices: Vec<usize>      => ACTUAL Indices of keys were updated in core.prop_keys
+updated_keys_section_ids             => Each element represents their section id
+KEYS WITH 1:1 relation Group (2)
+================================
+new_keys: Vec<[usize; 2]>               => Holds the new keys   [references to arena slices]
+new_keys_hashes: Vec<u64>            => Holds the new keys hash
+new_values: Vec<[usize; 2]>             => Holds the new values [references to arena slices]
+new_keys_section_ids: Vec<usize>     => The section id where each new key belongs to
+SPECIAL
+=======
+dead_keys: Vec<bool>                => Boolean representing which key were deleted.
+                                        SPECIALITY: This vector's data upto index core.prop_keys.len()-1 belongs to core.prop_keys
+                                                    the next starting from index core.prop_keys.len() to Vec:updated_keys.len() are 1:1 with Group(1)
+                                                    the next starting from index Vec:updated_keys.len() to Vec:new_keys.len() are 1:1 with Group(2)
+
+VEC WITH 1:1 relation Group (3)
+================================
+new_sections: Vec<&'a str>           => Holds new sections strings
+new_sections_hashes: Vec<u64>        => Holds new sections hashes
+
+SPECIAL
+=======
+dead_sections: Vec<usize>            => Boolean representing which sections were deleted.
+                                        SPECIALITY: This vector's data upto index core.sections.len()-1 belongs to core.sections
+                                                    BUT the rest starting from index core.sections.len() are 1:1 with Group(3)
+parent_tracker: Vec<usize>           => Usize representing parent of each section
+                                        SPECIALITY: This vector's data upto index core.sections.len()-1 belongs to core.sections
+                                                    BUT the rest starting from index core.sections.len() are 1:1 with Group(3)
+LOGIC
+=====
+
+Helper Functions
+================
+func key_was_updated(key, section_id) -> INDEX {
+    IF key in Vec:updated_keys_hashes -> index AND updated_keys_section_ids[index] == section_id:
+        RET index
+}
+func is_new_key(key,section_id) -> INDEX at Vec:updated_keys_hashes{
+     IF key in Vec:new_keys_hashes YIELD index:
+        if new_keys_section_ids[index] == section_id:
+            Ok(index)
+     ELSE: None
+}
+func key_in_core(key,section_id) -> INDEX at Vec:core.prop_keys[section_id]{
+     start = core.properties_tracker[section_id]
+     end = core.properties_tracker[section_id+1]
+     IF key in core.properties_hashes[start..end] RET its REL_INDEX by adding START
+     ELSE: None
+}
+
+func get_actual_idx_and_hash_vec(section_id) -> (usize, Vec<u64>){
+    IF section_id < core.sections.len():
+        offset = 0;
+        hash_vec = core.sections_hash
+    ELSE:
+        offset = core.sections.len();
+        hash_vec = new_sections_hashes
+
+    (section_id-offset, hash_vec)
+}
+}
+
+BASE
+====
+WHILE LOOP THROUGH SECTIONS, INDEX: x:
+     WRITE_EXISTING_PROPS()
+     WRITE_NEW_PROPS()
+
+
+KEYS
+====
+CASE 1: User updates existing keys
+ METHOD: UPDATE_PROP Takes key,value,section_id:
+     IF key_was_updated(key):
+         -> 1. New value >> Arena -> [start, end] SET updated_keys_vals[y] = [start, end]
+     ELSE:
+         -> 1. New value >> Arena -> [start, end] >> Vec: updated_keys_vals
+            ISSUE: value updated BUT whose value is this?
+         -> 2. INDEX(Key) >> Vec: updated_key_indices
+            ISSUE: What section does it belong?
+         -> 3. Section id >> Vec: updated_keys_section_ids
+
+      func WRITE_EXISTING_PROPS(section_id):
+        existing_props_offset = core.properties_tracker[sect_idx]
+        existing_props = core.properties[existing_props_offset..core.properties_tracker[sect_idx+1]]
+        FOR ALL x AT prop_idx in Vec:core.prop_keys[section_id]:
+            KEY = core.props_keys[updated_key_indices[x]]
+            IF prop_idx IN Vec:updated_key_indices RET ITS INDEX as y:
+                VALUE = updated_keys[y]
+            ELSE:
+                VALUE = core.props_values[prop_idx]
+             key:value >> buffer
+
+CASE 2: User creates new keys
+ METHOD: NEW_PROP TAKES key,value, section_id:
+     -> 1. New key             >> Arena -> [start, end] -> [start, end] >> Vec:new_keys
+        ISSUE: comparing str is SLOW, So compare NUMBERS
+           New key hash        >> HASHER -> hash >> Vec:new_keys_hash
+        ISSUE: In what section do we write this in?
+           New key's parent id >> Vec:new_keys_section_id
+        ISSUE: Whats the value?
+           New values          >> Vec:new_values
+
+      func WRITE_NEW_PROPS(section_id):
+         FOR ALL x AT idx in Vec:new_keys_section_id:
+             x == section_id => {
+                 key   = Vec:new_keys[idx]
+                 value = Vec:new_values[idx]
+                 key:value >> buffer
+             }
+CASE 3: User tried creating new keys that already exists
+ METHOD: NEW_KEY_VALIDATION
+     -> 1. Get index of new key
+     -> 2. Check if this index exists in Vec:updated_key_indices
+     -> 3. RESULT: TRUE  => CALL (UPDATE_PROP)
+     -> 3. RESULT: FALSE => CALL (NEW_PROP)
+CASE 4: User retrieves key
+ METHOD: GET_KEY Takes key,section_id:
+     -> 1. key_was_updated(key) -> RESULT: index
+     -> 2. YES                                  =>{
+            Vec:updated_keys_vals[index]
+        }
+     -> 2. NO                                   =>{
+            key_in_core(key,section_id) -> RESULT:index -> RET core.prop_keys[section_id][index]
+        }
+     -> 2. NO BUT HASH_MATCH in new_keys_hashes =>{
+            is_new_key(key,section_id) -> RESULT:index -> RET core.prop_keys[section_id][index]
+        }
+CASE 5: User retrieves new key [CASE: 4 COVERS] [DEFAULT]
+CASE 6: User retrieves old key [CASE: 4 COVERS] [FALLBACK]
+CASE 7: User deletes key
+ METHOD: DELETE_KEY Takes key:
+     -> 1. key_was_updated(key) -> RESULT: index
+     -> 2. YES => Vec:dead_keys[index] = true;
+     -> 2. NO  => {
+             key_in_core(key,section_id) -> RESULT:index -> Vec:dead_keys[index] = true;
+        }
+     -> 2. NO && is_new_key(key,section_id) -> RESULT:index => {
+
+        };
+CASE 8: User deletes old key [CASE: 7 COVERS] [DEFAULT]
+CASE 9: User deletes new key [CASE: 7 COVERS] [FALLBACK]
+
+SECTIONS
+========
+CASE 1: User creates new section under for a parent:
+    METHOD NEW_SECT Take section_name,parent_id:
+        let offset = 0;
+        let mut hash_vec;
+        FOR sect_parent_id AT idx in parent_tracker:
+            (offset, hash_vec) = get_offset_and_hash_vec(section_id);
+            if hash_vec[idx - offset] == hash(section_name):
+                ERROR! Existing section
+
+        new_sections.push(section_name);
+        new_sections_hashes.push(hash(section_name));
+        parent_tracker.push(parent_id);
+
+CASE 2: User moves a section from Parent A to Parent B
+    METHOD SECT_MOVE Takes section_id,target_parent_id:
+        let mut hash_vec;
+        (relative_sect_id, hash_vec) = get_offset_and_hash_vec(section_id);
+        // Special vectors dont need actual_sect_id
+        parent_tracker[section_id] = target_parent_id
+
+CASE 3: User deletes a section
+    METHOD DELETE_SECTION Takes section_id:
+        (relative_sect_id, hash_vec) = get_offset_and_hash_vec(section_id);
+        // Special vectors dont need actual_sect_id
+        dead_sections[section_id] = true;
+CASE 4: User deletes a section from existing sections      [CASE 3:COVERED]
+CASE 5: User deletes a section from newly created sections [CASE 3:COVERED]
+INTEGRATER Functions
+====================
+func write_section_recursive(sect_idx):
+    IF dead_sections[sect_idx] == true: RETURN
+
+    WRITE "sect_name {"
+    WRITE_EXISTING_PROPS(sect_idx)
+    WRITE_NEW_PROPS(sect_idx)
+
+    // Find children by scanning parent_tracker
+    FOR child_idx AT idx in parent_tracker:
+        IF parent_tracker[idx] == sect_idx AND idx != sect_idx:
+            write_section_recursive(child_idx)
+
+    WRITE "}"
+FINAL_WRITE
+===========
+write_section_recursive(parent_id)

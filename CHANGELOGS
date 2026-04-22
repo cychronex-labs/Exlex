@@ -1,0 +1,11 @@
+# Parser changes
+- Renamed to exlex
+- Quotes are enforced on all literals [Now utilizing more SIMD]
+- section keyword -> sect keyword
+- utilize memchr on skipping newlines
+- Bug fixes
+- no_std support
+- proptested and fuzz tested
+- Added DOD-based Mutator
+    - Handles adding,updating properties and sections
+    - Handles deletions
