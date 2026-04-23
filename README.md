@@ -108,3 +108,19 @@ Data shape heavily impacts CPU caching. We test against several mathematically g
 ![Exlex Benchmark: MutationArena](assets/MutationArena.png)
 ![Exlex Benchmark: IterationDrain](assets/IterationDrain.png)
 ![Exlex Benchmark: RoundTrip](assets/Roundtrip.png)
+
+### 🚀 Performance Summary
+
+| Benchmark Category | Scenario | Exlex (DOD) | Industry Standard | Speedup |
+| :--- | :--- | :--- | :--- | :--- |
+| **Ingestion (Parse)** | Lopsided Dense | **29,579 ns** | 163,179 ns (Serde JSON) | **~5.51x Faster** |
+| **Mutation (Delete)** | Section Removal | **496 ns** | 619,245 ns (TOML Edit) | **~1,247x Faster** |
+| **Iteration** | Section Drain | **46 ns** | 96 ns (Serde JSON) | **~2.06x Faster** |
+| **Roundtrip** | Parse+Mutate+Save | **391,534 ns** | 4,594,995 ns (TOML Edit) | **~11.72x Faster** |
+
+
+
+### Mechanical Sympathy (Hardware Stats)
+I measured the hardware execution on an **Intel i3-6006U**:
+* **Instructions Per Cycle (IPC):** **1.745**. This confirms the CPU is nearly always busy and rarely waiting for memory stalls.
+* **L1 Cache Locality:** By using parallel vectors instead of a standard tree, I achieved a very high cache hit rate, evidenced by the low **0.007% TLB miss rate**.
