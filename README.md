@@ -107,7 +107,7 @@ Data shape heavily impacts CPU caching. We test against several mathematically g
 ![Exlex Benchmark: LookupNested](assets/LookupNested.png)
 ![Exlex Benchmark: MutationArena](assets/MutationArena.png)
 ![Exlex Benchmark: IterationDrain](assets/IterationDrain.png)
-![Exlex Benchmark: RoundTrip](assets/Roundtrip.png)
+![Exlex Benchmark: RoundTrip](assets/RoundTrip.png)
 
 ### 🚀 Performance Summary
 
@@ -124,3 +124,6 @@ Data shape heavily impacts CPU caching. We test against several mathematically g
 I measured the hardware execution on an **Intel i3-6006U**:
 * **Instructions Per Cycle (IPC):** **1.745**. This confirms the CPU is nearly always busy and rarely waiting for memory stalls.
 * **L1 Cache Locality:** By using parallel vectors instead of a standard tree, I achieved a very high cache hit rate, evidenced by the low **0.007% TLB miss rate**.
+
+
+"These metrics were captured using perf stat on Linux. I'm focusing on Data-Oriented Design to maximize hardware efficiency, and these numbers represent the initial results of that approach."
