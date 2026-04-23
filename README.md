@@ -5,11 +5,11 @@ Exlex is a config parser I built on just 2 rules:
 1. **No structs inside an array**
 2. **NO Vectors inside vectors**
 3. **Minimize copying of strings** to absolute minimum [I believe I am not copying strings at all inside Exlex]
-**Why?** Because it makes veloxia more cache friendly, On my processor (Intel core i3 6006U), I was able put around 40 properties in a single section and linear search is faster than Hashmap and Btree. But if you want more properties you can always make more sections.
+**Why?** Because it makes exlex more cache friendly, On my processor (Intel core i3 6006U), I was able put around 40 properties in a single section and linear search is faster than Hashmap and Btree. But if you want more properties you can always make more sections.
 
 ## Syntax
-```vml
-# Comments originally created so I can kind of simulate the state of vector in vml (Velox Markup Language) file
+```exl
+# Comments originally created so I can kind of simulate the state of vector in exl file
 
 # Property keys are strictly unquoted and can contain only a-z, A-Z, 1-0 and underscores
 # and only quoted literals are allowed to have any other symbols

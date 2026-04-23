@@ -1,11 +1,7 @@
-# Parser changes
-- Renamed to exlex
-- Quotes are enforced on all literals [Now utilizing more SIMD]
-- section keyword -> sect keyword
-- utilize memchr on skipping newlines
-- Bug fixes
-- no_std support
-- proptested and fuzz tested
-- Added DOD-based Mutator
-    - Handles adding,updating properties and sections
-    - Handles deletions
+- v1.0.2
+- Cleanup
+- Mutator no longer supports Retrieval [it was inefficient] instead use save and reloading
+    - Mutator::new takes in 2 new parameters: ExlexArena, write_buffer
+- Overhaul in interface.rs, introduces ExlexSection struct
+- Minor optimizations
+- New benchmarks

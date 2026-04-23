@@ -9,17 +9,38 @@
 extern crate alloc;
 
 use crate::{
-    interface::Exlex,
+    interface::{Exlex, ExlexSection},
     parser::{ErrorCode, ExlexError, Result, hash},
 };
 use alloc::string::String;
 use alloc::vec;
 use alloc::vec::Vec;
-use core::fmt::Write;
+use core::{
+    fmt::Write,
+    ops::{Deref, DerefMut},
+};
 
-pub struct ExlexMutator<'a> {
+pub struct ExlexArena(pub String);
+
+impl Deref for ExlexArena {
+    type Target = String;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+impl DerefMut for ExlexArena {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+pub struct ExlexMutator<'a, 'b> {
     core: &'a Exlex<'a>,
-    arena: String,
+    // May live only short time unlike the core which is initialization
+    arena: &'b mut ExlexArena,
     // Stores new values &str
     updated_keys_vals: Vec<[usize; 2]>,
     updated_keys_hashes: Vec<u64>,
@@ -40,13 +61,18 @@ pub struct ExlexMutator<'a> {
     new_sections_parent_ids: Vec<usize>,
     dead_sections: Vec<bool>,
     parent_tracker: Vec<usize>,
-    dump_data: String,
+    write_buffer: &'b mut String,
 }
-impl<'a> ExlexMutator<'a> {
-    pub fn new(exlex: &'a Exlex, data: &'a str) -> Self {
+
+impl<'a, 'b> ExlexMutator<'a, 'b> {
+    pub fn new(
+        exlex: &'a Exlex<'a>, // FIXED: Exlex uses the long-lived 'a foundation
+        data: &'b mut ExlexArena,
+        write_buffer: &'b mut String, // FIXED: write_buffer uses the short-lived 'b scaffolding
+    ) -> Self {
         ExlexMutator {
             core: exlex,
-            arena: String::new(),
+            arena: data,
             updated_keys_vals: Vec::new(),
             updated_keys_hashes: Vec::new(),
             updated_key_indices: Vec::new(),
@@ -61,7 +87,7 @@ impl<'a> ExlexMutator<'a> {
             dead_keys: vec![false; exlex.prop_keys.len()],
             dead_sections: vec![false; exlex.sections.len()],
             parent_tracker: exlex.parent_tracker.clone(),
-            dump_data: String::with_capacity(data.len()),
+            write_buffer: write_buffer,
         }
     }
     fn key_was_updated(&self, key: &str, section_id: usize) -> usize {
@@ -142,10 +168,6 @@ impl<'a> ExlexMutator<'a> {
     fn dead_new_key_idx(&self, idx: usize) -> usize {
         self.core.prop_keys.len() + self.updated_keys_vals.len() + idx
     }
-    #[inline]
-    fn new_sect_parent_tracker_idx(&self, idx: usize) -> usize {
-        self.core.sections.len() + idx
-    }
     fn key_in_core(&self, key: &str, section_id: usize) -> usize {
         let mut start = self.core.properties_tracker[section_id];
         let end = self.core.properties_tracker[section_id + 1];
@@ -162,43 +184,13 @@ impl<'a> ExlexMutator<'a> {
         }
         return usize::MAX;
     }
-    fn get_actual_idx_and_hash_vec(&self, section_id: usize) -> (usize, &Vec<u64>) {
-        if section_id < self.core.sections.len() {
-            return (section_id, &self.core.sections_hash);
-        } else {
-            let offset = self.core.sections.len();
-            return (section_id - offset, &self.new_sections_hashes);
-        };
-    }
-    pub fn get_property(&mut self, key: &str, section_id: usize) -> Result<&str> {
-        let new_key_idx = self.is_new_key(key, section_id);
-        if new_key_idx != usize::MAX {
-            let [val_start, val_end] = self.new_values[new_key_idx];
-            return Ok(&self.arena[val_start..val_end]);
-        } else {
-            let updated_key_idx = self.key_was_updated(key, section_id);
-            if updated_key_idx != usize::MAX {
-                let [val_start, val_end] = self.updated_keys_vals[updated_key_idx];
-                return Ok(&self.arena[val_start..val_end]);
-            } else {
-                let key_idx = self.key_in_core(key, section_id);
-                if key_idx != usize::MAX {
-                    return Ok(self.core.prop_values[key_idx]);
-                } else {
-                    Err(ExlexError {
-                        code: ErrorCode::PropertyNotFound,
-                        index: key_idx,
-                    })
-                }
-            }
-        }
-    }
 
-    pub fn update_prop(&mut self, key: &str, value: &str, section_id: usize) {
+    pub fn update_prop(&mut self, key: &str, value: &str, section: ExlexSection) {
         // Check if user is trying to update an newly created key
+        let section_id = section.0;
         let new_key_idx = self.is_new_key(key, section_id);
         let val_start = self.arena.len();
-        self.arena += value;
+        self.arena.push_str(value);
         let val_end = self.arena.len();
         if new_key_idx != usize::MAX {
             self.new_values[new_key_idx] = [val_start, val_end];
@@ -220,7 +212,7 @@ impl<'a> ExlexMutator<'a> {
                 } else {
                     // Create entirely new key,value
                     let key_start = self.arena.len();
-                    self.arena += key;
+                    self.arena.push_str(key);
                     let key_end = self.arena.len();
                     self.new_keys.push([key_start, key_end]);
                     self.new_keys_hashes.push(hash(key));
@@ -232,11 +224,11 @@ impl<'a> ExlexMutator<'a> {
         }
     }
 
-    pub fn delete_property(&mut self, key: &str, section_id: usize) -> Result<()> {
+    pub fn delete_property(&mut self, key: &str, section: ExlexSection) -> Result<()> {
+        let section_id = section.0;
         let updated_key_idx = self.key_was_updated(key, section_id);
         if updated_key_idx != usize::MAX {
             let actual_idx = self.updated_key_indices[updated_key_idx];
-            let dead_key_idx = self.core.prop_keys.len() + updated_key_idx;
             self.dead_keys[actual_idx] = true;
             Ok(())
         } else {
@@ -286,13 +278,13 @@ impl<'a> ExlexMutator<'a> {
             } else {
                 self.core.prop_values[actual_index]
             };
-            write!(self.dump_data, "\"").unwrap();
-            write!(self.dump_data, "{}", key).unwrap();
-            write!(self.dump_data, "\"").unwrap();
-            write!(self.dump_data, ": ").unwrap();
-            write!(self.dump_data, "\"").unwrap();
-            write!(self.dump_data, "{}", value).unwrap();
-            write!(self.dump_data, "\"\n").unwrap();
+            write!(self.write_buffer, "\"").unwrap();
+            write!(self.write_buffer, "{}", key).unwrap();
+            write!(self.write_buffer, "\"").unwrap();
+            write!(self.write_buffer, ": ").unwrap();
+            write!(self.write_buffer, "\"").unwrap();
+            write!(self.write_buffer, "{}", value).unwrap();
+            write!(self.write_buffer, "\"\n").unwrap();
             index += 1;
         }
     }
@@ -313,30 +305,30 @@ impl<'a> ExlexMutator<'a> {
             let [val_start, val_end] = self.new_values[actual_idx];
             let key = &self.arena[key_start..key_end];
             let value = &self.arena[val_start..val_end];
-            write!(self.dump_data, "\"").unwrap();
-            write!(self.dump_data, "{}", key).unwrap();
-            write!(self.dump_data, "\"").unwrap();
-            write!(self.dump_data, ": ").unwrap();
-            write!(self.dump_data, "\"").unwrap();
-            write!(self.dump_data, "{}", value).unwrap();
-            write!(self.dump_data, "\"\n").unwrap();
+            write!(self.write_buffer, "\"").unwrap();
+            write!(self.write_buffer, "{}", key).unwrap();
+            write!(self.write_buffer, "\"").unwrap();
+            write!(self.write_buffer, ": ").unwrap();
+            write!(self.write_buffer, "\"").unwrap();
+            write!(self.write_buffer, "{}", value).unwrap();
+            write!(self.write_buffer, "\"\n").unwrap();
             offset = actual_idx + 1;
         }
     }
     fn write_section(&mut self, sect_idx: usize) {
         if sect_idx != 0 {
-            write!(self.dump_data, "sect \"").unwrap();
+            write!(self.write_buffer, "sect \"").unwrap();
             if sect_idx >= self.core.sections.len() {
                 write!(
-                    self.dump_data,
+                    self.write_buffer,
                     "{}",
                     self.new_sections[sect_idx - self.core.sections.len()]
                 )
                 .unwrap();
             } else {
-                write!(self.dump_data, "{}", self.core.sections[sect_idx]).unwrap();
+                write!(self.write_buffer, "{}", self.core.sections[sect_idx]).unwrap();
             }
-            write!(self.dump_data, "\" {{\n").unwrap();
+            write!(self.write_buffer, "\" {{\n").unwrap();
         }
         self.write_existing_props(sect_idx);
         self.write_new_props(sect_idx);
@@ -355,10 +347,11 @@ impl<'a> ExlexMutator<'a> {
             offset = actual_idx + 1;
         }
         if sect_idx != 0 {
-            write!(self.dump_data, "}}\n").unwrap();
+            write!(self.write_buffer, "}}\n").unwrap();
         }
     }
-    pub fn new_section(&mut self, section_name: &'a str, parent_id: usize) -> Result<()> {
+    pub fn new_section(&mut self, section_name: &'a str, parent: ExlexSection) -> Result<()> {
+        let parent_id = parent.0;
         if self.is_new_section(section_name, parent_id) != usize::MAX {
             Err(ExlexError {
                 code: ErrorCode::AlreadyCreatedSection,
@@ -380,19 +373,15 @@ impl<'a> ExlexMutator<'a> {
             }
         }
     }
-    pub fn move_section(&mut self, section_id: usize, to_parent_id: usize) {
-        self.parent_tracker[section_id] = to_parent_id
+    pub fn move_section(&mut self, section_id: usize, to_parent: ExlexSection) {
+        self.parent_tracker[section_id] = to_parent.0;
     }
-    pub fn delete_section(&mut self, section_id: usize) {
-        self.dead_sections[section_id] = true;
+    pub fn delete_section(&mut self, section: ExlexSection) {
+        self.dead_sections[section.0] = true;
     }
 
-    fn write_into(&mut self, data: &'a str) {
-        write!(self.dump_data, "{}", data).unwrap();
-    }
-    pub fn save(&mut self) -> String {
-        self.dump_data.clear();
+    pub fn save(&mut self) {
+        self.write_buffer.clear();
         self.write_section(0);
-        return self.dump_data.clone();
     }
 }

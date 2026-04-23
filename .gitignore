@@ -2,3 +2,6 @@
 /Data
 /Cargo.lock
 /backups
+/CHANGELOGS
+/src/interfaceold.rs
+/src/writerold.rs

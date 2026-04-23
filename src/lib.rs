@@ -14,8 +14,6 @@ mod interface;
 mod parser;
 mod writer;
 
-pub use interface::Exlex;
+pub use interface::{Exlex, ExlexSection};
 pub use parser::{ErrorCode, ExlexError, Result};
-pub use writer::ExlexMutator;
-#[cfg(test)]
-mod tests;
+pub use writer::{ExlexArena, ExlexMutator};
