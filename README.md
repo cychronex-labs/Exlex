@@ -1,5 +1,5 @@
 # Exlex 
-> **STATUS: AT ALPHA STAGE** > *Readme is still a work in progress.*
+> **STATUS: AT BETA STAGE** > *Readme is still a work in progress.*
 
 Exlex is a config parser I built on 3 core rules:
 1. **No structs inside an array**
@@ -49,7 +49,7 @@ sect "Client" {
 
 ### Pros
 
-  - **Data-Oriented Design & Cache friendliness** (TLB Miss was 0.007% and IPC was 1.7)
+  - **Data-Oriented Design & Cache friendliness** (TLB Miss was 0.07% and IPC was 1.7)
   - Support for `no_std`
   - Extremely low memory usage
   - SIMD acceleration on specific portions (Not the entire parser like `sonic-rs` or `simdjson` because that is too complex for me right now)
@@ -124,7 +124,13 @@ Data shape heavily impacts CPU caching. We test against several mathematically g
 ### Perf_stat output 
 I measured the hardware execution on an **Intel i3-6006U**:
 * **Instructions Per Cycle (IPC):** **1.745**. This confirms the CPU is nearly always busy and rarely waiting for memory stalls.
-* **L1 Cache Locality:** By using parallel vectors instead of a standard tree, I achieved a very high cache hit rate, evidenced by the low **0.007% TLB miss rate**.
+* **L1 Cache Locality:** By using parallel vectors instead of a standard tree, I achieved a very high cache hit rate, evidenced by the low **0.07% TLB miss rate**.
 
 
 "These metrics were captured using perf stat on Linux. I'm focusing on Data-Oriented Design to maximize hardware efficiency, and these numbers represent the initial results of that approach."
+
+### The Naming
+**Exlex** - Comes from latin for **"Lawless"**. 
+**Reasons**: 
+- DOD-based parsers usually don't offer data mutation; I do, and it is exceptionally fast.
+- Standard parsers default to HashMaps, but I use Linear Search. In the domain of configuration parsing, sacrificing baseline performance just to support massive property counts in a single section is not ideal. For contiguous arrays of numbers, a linear search on a modern processor is incredibly fast.

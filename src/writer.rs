@@ -49,7 +49,8 @@ pub struct ExlexMutator<'a, 'b> {
     // Old key sections
     updated_keys_section_ids: Vec<usize>,
     // Includes KEYS OF CORE!
-    dead_keys: Vec<bool>,
+    dead_core_keys: Vec<bool>,
+    dead_new_keys: Vec<bool>,
 
     // New keys
     new_keys: Vec<[usize; 2]>,
@@ -84,7 +85,8 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
             new_sections: Vec::new(),
             new_sections_hashes: Vec::new(),
             new_sections_parent_ids: Vec::new(),
-            dead_keys: vec![false; exlex.prop_keys.len()],
+            dead_core_keys: vec![false; exlex.prop_keys.len()],
+            dead_new_keys: Vec::new(),
             dead_sections: vec![false; exlex.sections.len()],
             parent_tracker: exlex.parent_tracker.clone(),
             write_buffer: write_buffer,
@@ -164,10 +166,6 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
         return usize::MAX;
     }
     // Partition aware returns
-    #[inline]
-    fn dead_new_key_idx(&self, idx: usize) -> usize {
-        self.core.prop_keys.len() + self.updated_keys_vals.len() + idx
-    }
     fn key_in_core(&self, key: &str, section_id: usize) -> usize {
         let mut start = self.core.properties_tracker[section_id];
         let end = self.core.properties_tracker[section_id + 1];
@@ -208,7 +206,7 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
                     self.updated_keys_vals.push([val_start, val_end]);
                     self.updated_key_indices.push(key_idx);
                     self.updated_keys_section_ids.push(section_id);
-                    self.dead_keys.push(false);
+                    self.dead_core_keys[key_idx] = false;
                 } else {
                     // Create entirely new key,value
                     let key_start = self.arena.len();
@@ -218,7 +216,7 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
                     self.new_keys_hashes.push(hash(key));
                     self.new_keys_section_ids.push(section_id);
                     self.new_values.push([val_start, val_end]);
-                    self.dead_keys.push(false);
+                    self.dead_new_keys.push(false);
                 }
             }
         }
@@ -229,18 +227,17 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
         let updated_key_idx = self.key_was_updated(key, section_id);
         if updated_key_idx != usize::MAX {
             let actual_idx = self.updated_key_indices[updated_key_idx];
-            self.dead_keys[actual_idx] = true;
+            self.dead_core_keys[actual_idx] = true;
             Ok(())
         } else {
             let key_idx = self.key_in_core(key, section_id);
             if key_idx != usize::MAX {
-                self.dead_keys[key_idx] = true;
+                self.dead_core_keys[key_idx] = true;
                 Ok(())
             } else {
                 let new_key_idx = self.is_new_key(key, section_id);
                 if new_key_idx != usize::MAX {
-                    let dead_key_idx = self.dead_new_key_idx(new_key_idx);
-                    self.dead_keys[dead_key_idx] = true;
+                    self.dead_new_keys[new_key_idx] = true;
                     Ok(())
                 } else {
                     Err(ExlexError {
@@ -261,7 +258,7 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
         let mut index = 0;
         while index < existing_props.len() {
             let actual_index = existing_props_offset + index;
-            if self.dead_keys[actual_index] {
+            if self.dead_core_keys[actual_index] {
                 index += 1;
                 continue;
             }
@@ -296,8 +293,7 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
             .position(|&sect_id| section_id == sect_id)
         {
             let actual_idx = offset + new_key_idx;
-            let dead_idx = self.dead_new_key_idx(actual_idx);
-            if dead_idx < self.dead_keys.len() && self.dead_keys[dead_idx] {
+            if new_key_idx < self.dead_new_keys.len() && self.dead_new_keys[new_key_idx] {
                 offset = actual_idx + 1;
                 continue; // Skip the dead key
             }

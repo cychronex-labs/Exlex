@@ -1,7 +1,3 @@
-- v1.0.2
-- Cleanup
-- Mutator no longer supports Retrieval [it was inefficient] instead use save and reloading
-    - Mutator::new takes in 2 new parameters: ExlexArena, write_buffer
-- Overhaul in interface.rs, introduces ExlexSection struct
-- Minor optimizations
-- New benchmarks
+- v1.0.3
+- README Changes
+- Addressed a fatal bug that made deleted property still exist in the final output of Mutator
