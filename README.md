@@ -43,7 +43,7 @@ sect "Client" {
     "host": "127.0.0.1"
     "port": "8080"
 }
-````
+```
 
 ## Pros and Cons
 
@@ -84,11 +84,15 @@ To ensure `exlex` performs consistently across all use cases, the benchmark suit
 #### 1\. The Operations
 
   * **Parse Init:** Raw ingestion throughput. Measures how fast the engine converts a string into the flat-array DOD structure.
+  * **Cold Start:** Measures parse + section traverse + first key read as one atomic operation. Represents every application's startup sequence.
   * **Lookup Flat:** Key retrieval speed within a single section, testing both worst-case linear scans and hash-collision resolution.
   * **Lookup Nested:** Path traversal speed. Tests the cost of navigating down deeply nested section hierarchies.
   * **Iteration Drain:** Sequential reading speed. Proves the cache-locality advantage of flat arrays by iterating over every property in a section.
   * **Mutation Arena:** The speed of editing memory (Add, Update, Delete). Tests the performance of the lock-free, append-only arena.
+  * **Mixed Workload:** Simulates real-world server config hot-reloading (70% reads / 30% writes interleaved). Tests the engine's ability to mutate and query simultaneously without allocator thrashing.
   * **Roundtrip Pipeline:** A real-world lifecycle test. Times the full process of parsing a file, executing mass updates, and saving it back to a string.
+  * **Allocation Audit (DHAT):** Hooks into the global memory allocator to measure the exact byte footprint and `malloc` call count, mathematically proving the zero-copy claims.
+  * **Asymptotic Crossover:** The algorithmic threshold test. Determines the exact property count where Exlex's $O(N)$ linear scan loses its L1 cache advantage and is overtaken by a traditional $O(1)$ HashMap. (Around 65-70 on Intel Core i3 6006U).
 
 #### 2\. The Data Topologies
 
@@ -102,32 +106,53 @@ Data shape heavily impacts CPU caching. We test against several mathematically g
   * **Lopsided Dense:** One massive, heavy section sitting next to dozens of completely empty sections. This tests memory allocation and edge-case scaling.
 
 ### Results
+
 ![Exlex Benchmark: ParseInit](assets/ParseInit.png)
+
+![Exlex Benchmark: ColdStart](assets/ColdStart.png)
+> **Cold Start:** Measures parse + section traverse + first key read as one atomic operation. Represents every application's startup sequence. All parsers build a queryable structure from scratch per iteration.
+
 ![Exlex Benchmark: LookupFlat](assets/LookupFlat.png)
+
 ![Exlex Benchmark: LookupNested](assets/LookupNested.png)
+
 ![Exlex Benchmark: MutationArena](assets/MutationArena.png)
+
+![Exlex Benchmark: MixedWorkload](assets/MixedWorkload.png)
+> **Mixed Workload:** 70% reads / 30% writes interleaved on the same section. *Note: Serde JSON column shows read-only cost (it has no mutation API). TOML Edit clones the document per iteration (its architecture cost). Exlex reuses the immutable parsed core and resets only the lightweight mutator overlay.*
+
 ![Exlex Benchmark: IterationDrain](assets/IterationDrain.png)
+
 ![Exlex Benchmark: RoundTrip](assets/RoundTrip.png)
 
-### 🚀 Performance Summary
+![Exlex Benchmark: AsymptoticCrossover](assets/AsymptoticCrossover.png)
 
-| Benchmark Category | Scenario | Exlex (DOD) | Industry Standard | Speedup |
+![Exlex Benchmark: HeapFootprint](assets/HeapFootprint.png)
+
+![Exlex Benchmark: HeapAllocations](assets/HeapAllocations.png)
+
+### 🚀 Performance & Memory Summary
+
+| Benchmark Category | Scenario | Exlex (DOD) | Industry Standard | Speedup / Diff |
 | :--- | :--- | :--- | :--- | :--- |
-| **Ingestion (Parse)** | Lopsided Dense | **29,579 ns** | 163,179 ns (Serde JSON) | **~5.51x Faster** |
+| **Ingestion (Parse)** | Lopsided Dense | **29,579 ns** | 163,179 ns (Serde JSON) | **~5.5x Faster** |
+| **Cold Start** | Parse+Traverse+Read (Bushy) | **221,089 ns** | 854,230 ns (Serde JSON) | **~3.8x Faster** |
 | **Mutation (Delete)** | Section Removal | **496 ns** | 619,245 ns (TOML Edit) | **~1,247x Faster** |
+| **Mixed Workload** | 70% Read / 30% Write | **1,194 ns** | 646,444 ns (TOML Edit) | **~541x Faster** |
 | Lookup (Single) |	Dense Last (100 items) | 211 ns |	173 ns (Serde JSON) |	~1.2x Slower |
 | Lookup (Nested)	| Path Depth 6 | 249 ns |	160 ns (Serde JSON) |	~1.5x Slower |
-| **Iteration** | Section Drain | **46 ns** | 96 ns (Serde JSON) | **~2.06x Faster** |
-| **Roundtrip** | Parse+Mutate+Save | **391,534 ns** | 4,594,995 ns (TOML Edit) | **~11.72x Faster** |
-
+| **Iteration** | Section Drain | **46 ns** | 96 ns (Serde JSON) | **~2.0x Faster** |
+| **Roundtrip** | Parse+Mutate+Save | **391,534 ns** | 4,594,995 ns (TOML Edit) | **~11.7x Faster** |
+| **Memory Footprint** | Parse Init (DHAT) | **84 KB** | 2.7 MB (TOML Edit) | **~32x Smaller** |
+| **Heap Allocations** | Parse Init (DHAT) | **16 calls** | 13,445 calls (TOML Edit) | **~840x Fewer** |
+| **Heap Allocations** | Mutation (DHAT) | **13 calls** | 15,000 calls (TOML Edit) | **~1,153x Fewer** |
 
 ### Perf_stat output 
-I measured the hardware execution on an **Intel i3-6006U**:
-* **Instructions Per Cycle (IPC):** **1.745**. This confirms the CPU is nearly always busy and rarely waiting for memory stalls.
-* **L1 Cache Locality:** By using parallel vectors instead of a standard tree, I achieved a very high cache hit rate, evidenced by the low **0.07% TLB miss rate**.
+I measured the hardware execution on an **Intel i3-6006U (Skylake, 2C/4T, 2.0GHz)**:
+* **Instructions Per Cycle (IPC):** **1.7**. This confirms the CPU's pipeline is nearly always fed and rarely waiting for memory stalls.
+* **L1 Cache Locality:** By using flat parallel vectors instead of a standard node tree, I achieved a very high cache hit rate, mathematically evidenced by the **0.07% TLB miss rate**.
 
-
-"These metrics were captured using perf stat on Linux. I'm focusing on Data-Oriented Design to maximize hardware efficiency, and these numbers represent the initial results of that approach."
+"These metrics were captured using `perf stat` on Linux. I'm focusing on Data-Oriented Design to maximize hardware efficiency, and these numbers represent the initial results of that approach."
 
 ### The Naming
 **Exlex** - Comes from latin for **"Lawless"**. 
