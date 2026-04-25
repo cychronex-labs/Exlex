@@ -1,0 +1,12 @@
+# Proptest executes:
+- Proptested (AI have been used for proptest)
+- What a single iteration of proptest_mutator_engine actually does:
+  - Generates a random, multi-level HashMap AST.
+  - Serializes it into a custom string.
+  - Parses that string from scratch into the Exlex DOD flat arrays.
+  - Spins up the Arena Mutator.
+  - Executes up to 30 random Upserts, Deletes, and Section Additions simultaneously on both the Exlex engine and the shadow HashMap.
+  - Saves the mutated Exlex data back to a string buffer.
+  - Re-parses that completely new string.
+  - Recursively walks the trees to verify 100% data integrity.
+  - THE Code for this test is at Exlex-Benchmark/tests/proptest_fuzzer.rs

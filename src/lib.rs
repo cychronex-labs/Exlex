@@ -7,6 +7,7 @@
 // except according to those terms.
 
 #![cfg_attr(not(feature = "std"), no_std)]
+#![doc = include_str!("../README.md")]
 
 extern crate alloc;
 

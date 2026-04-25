@@ -36,7 +36,7 @@ impl DerefMut for ExlexArena {
         &mut self.0
     }
 }
-
+/// Arena based Mutator struct.
 pub struct ExlexMutator<'a, 'b> {
     core: &'a Exlex<'a>,
     // May live only short time unlike the core which is initialization
@@ -57,6 +57,7 @@ pub struct ExlexMutator<'a, 'b> {
     new_keys_hashes: Vec<u64>,
     new_keys_section_ids: Vec<usize>,
     new_values: Vec<[usize; 2]>,
+    // New sections
     new_sections: Vec<&'a str>,
     new_sections_hashes: Vec<u64>,
     new_sections_parent_ids: Vec<usize>,
@@ -182,7 +183,12 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
         }
         return usize::MAX;
     }
-
+    /// Update a Property/Create a new property
+    /// # Arguments
+    /// *`key`     - The property to update or key to be created
+    /// *`value`   - The value of property
+    /// *`section` - To which section do we add the key and value OR
+    ///              To whom does the key belong to update
     pub fn update_prop(&mut self, key: &str, value: &str, section: ExlexSection) {
         // Check if user is trying to update an newly created key
         let section_id = section.0;
@@ -221,7 +227,11 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
             }
         }
     }
-
+    /// Delete a property
+    /// # Arguments
+    /// *`key`     - The property to update or key to be created
+    /// *`section` - To which section do we add the key and value OR
+    ///              To whom does the key belong to update
     pub fn delete_property(&mut self, key: &str, section: ExlexSection) -> Result<()> {
         let section_id = section.0;
         let updated_key_idx = self.key_was_updated(key, section_id);
@@ -369,8 +379,8 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
             }
         }
     }
-    pub fn move_section(&mut self, section_id: usize, to_parent: ExlexSection) {
-        self.parent_tracker[section_id] = to_parent.0;
+    pub fn move_section(&mut self, section_id: ExlexSection, to_parent: ExlexSection) {
+        self.parent_tracker[section_id.0] = to_parent.0;
     }
     pub fn delete_section(&mut self, section: ExlexSection) {
         self.dead_sections[section.0] = true;

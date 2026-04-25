@@ -10,6 +10,8 @@ use crate::writer::{ExlexArena, ExlexMutator};
 use alloc::string::String;
 use alloc::vec::Vec;
 
+/// Zero-Copy, immutable configuration reader.
+/// Exlex utilizes a Data-Oriented Design (Structs-of-Array) to store parsed sections and properties in contiguous memory vectors.
 #[derive(Debug)]
 pub struct Exlex<'a> {
     pub(crate) sections: Vec<&'a str>,
@@ -21,10 +23,46 @@ pub struct Exlex<'a> {
     pub(crate) children_tracker: Vec<[usize; 2]>,
     pub(crate) parent_tracker: Vec<usize>,
 }
+
+/// ExlexSection is parameter required for most operations in interface and writer.
+/// It can be manually used if you are sure about the order of definition of sections
+/// Most of the time its recommended to use get_root, get_child etc
 #[derive(Clone, Copy)]
 pub struct ExlexSection(pub usize);
 
 impl<'a> Exlex<'a> {
+    /// Initializes the parser with data that needs to be parsed.
+    ///
+    /// Preallocator: Before actual parsing Exlex utilizes memchr to quickly scan through and record each occurrences of '{' and ':' and preallocates property count and section count bringing down the allocations made by exlex
+    /// Its not accurate but practically the Over allocation is negligible compared to Under allocation in most datasets
+    /// # Arguments
+    /// * `data` - The data to be parsed.
+    /// * `disable_preallocator`  - If `None` or `false`, Exlex will scan use the preallocator.
+    /// * `preallocate_sections`  - If preallocator is not disabled, You can give a manual preallocation to vectors related to sections.
+    /// * `preallocate_props`     - Same as before but for properties related vectors.
+    /// * `preallocate_max_depth` - Preallocation for nested depth vector (default: 5).
+    ///
+    /// # Errors
+    ///
+    /// Returns an [`ExlexError`] if the parser encounters malformed syntax, unclosed quotes,
+    /// or duplicate section definitions.
+    ///
+    /// # Examples
+    ///
+    /// ```rust
+    /// use exlex::Exlex;
+    ///
+    /// let config = r#"
+    ///     "version": "1.0"
+    ///     sect "Server" {
+    ///         "port": "8080"
+    ///     }
+    /// "#;
+    ///
+    /// let reader = Exlex::init_reader(config, None, None, None, None).unwrap();
+    /// let root = reader.get_root();
+    /// assert_eq!(reader.get_property("version", root).unwrap(), "1.0");
+    /// ```
     pub fn init_reader(
         data: &'a str,
         disable_preallocator: Option<bool>,
@@ -53,6 +91,11 @@ impl<'a> Exlex<'a> {
             parent_tracker: parser.parent_tracker,
         })
     }
+    /// Initializes the arena based mutator
+    /// Returns an [`ExlexMutator`]
+    /// # Arguments
+    /// * `arena`        - A String buffer that stores all new key/values until the saving
+    /// * `write_buffer` - A String buffer that is used to dump the new modified data
     pub fn init_mutator<'b>(
         &'a self,
         arena: &'b mut ExlexArena,
@@ -60,9 +103,16 @@ impl<'a> Exlex<'a> {
     ) -> Result<ExlexMutator<'a, 'b>> {
         Ok(ExlexMutator::new(self, arena, write_buffer))
     }
+    /// The root section (or the entire file scope)
+    /// Returns an [`ExlexSection`] (Root section id is 0)
     pub fn get_root(&self) -> ExlexSection {
         ExlexSection(0)
     }
+    /// Searches the given parent's children to find matching child and return corresponding ExlexSection
+    /// Returns an [`ExlexSection`]
+    /// # Arguments
+    /// * `child`  - The section that needs to be searched for (&str)
+    /// * `parent` - The parent section which needs to be searched (ExlexSection)
     pub fn get_child(&self, child: &str, parent: ExlexSection) -> Result<ExlexSection> {
         let parent_id = parent.0;
         let hashed_sect_name = hash(child);
@@ -86,13 +136,25 @@ impl<'a> Exlex<'a> {
             index: usize::MAX,
         })
     }
-    pub fn get_child_path(&self, path: &[&str], start_node: ExlexSection) -> Result<ExlexSection> {
-        let mut current = start_node;
-        for &node_name in path {
-            current = self.get_child(node_name, current)?;
+    /// Similar to [`get_child`] but takes an array of string for recursive search
+    /// Returns an [`ExlexSection`] of the last section
+    /// # Arguments
+    /// * `path`          - The sections that needs to be recursively searched (&[&str])
+    /// * `start_section` - The starting section (ExlexSection)
+    pub fn get_child_path(
+        &self,
+        path: &[&str],
+        start_section: ExlexSection,
+    ) -> Result<ExlexSection> {
+        let mut current = start_section;
+        for &sect_name in path {
+            current = self.get_child(sect_name, current)?;
         }
         Ok(current)
     }
+    /// Returns an iterator by zipping property keys and their values
+    /// # Arguments
+    /// * `section`  - Which section's properties are to be returned
     pub fn iter_section_properties(
         &self,
         section: ExlexSection,
@@ -105,6 +167,10 @@ impl<'a> Exlex<'a> {
             .copied()
             .zip(self.prop_values[start..end].iter().copied())
     }
+    /// Get value of a property as a string literal
+    /// # Arguments
+    /// * `key`  - Name of the property
+    /// * `section`  - Which section does `key` belong to
     pub fn get_property(&self, key: &str, section: ExlexSection) -> Result<&str> {
         let key_hash = hash(key);
         let section_id = section.0;
@@ -134,6 +200,7 @@ impl<'a> Exlex<'a> {
             index: usize::MAX,
         })
     }
+    /// Similar to [`get_property`] but returns value as a specific type
     pub fn get_property_as<T: core::str::FromStr>(
         &self,
         key: &str,
@@ -144,9 +211,5 @@ impl<'a> Exlex<'a> {
             code: ErrorCode::MalformedLiteral,
             index: usize::MAX,
         })
-    }
-    pub fn get_nested_property(&self, path: &[&str], key: &str) -> Result<&str> {
-        let section = self.get_child_path(path, self.get_root())?;
-        self.get_property(key, section)
     }
 }
