@@ -293,7 +293,7 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
             .position(|&sect_id| section_id == sect_id)
         {
             let actual_idx = offset + new_key_idx;
-            if new_key_idx < self.dead_new_keys.len() && self.dead_new_keys[new_key_idx] {
+            if new_key_idx < self.dead_new_keys.len() && self.dead_new_keys[actual_idx] {
                 offset = actual_idx + 1;
                 continue; // Skip the dead key
             }

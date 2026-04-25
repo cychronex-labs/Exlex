@@ -1,12 +1,23 @@
 # Exlex 
 > **STATUS: AT BETA STAGE** > *Readme is still a work in progress.*
 
-Exlex is a config parser I built on 3 core rules:
-1. **No structs inside an array**
-2. **No Vectors inside Vectors**
-3. **Minimize string copying to the absolute minimum** (I believe I am not copying strings at all inside the core of Exlex).
+Exlex is a config parser that uses SoA Architecture usually used in Game engines and Arena based mutator. Its not build to replace any existing configuration parsers. The advantage of exlex over most of others are a unique combination of:
+- Zero copy immutable parser
+- Native no_std support
+- SIMD byte search via memchr on specific functions
+- Supports modifying data and dumping it back into string (Arena mutator)
+- Human readable format
+- Low memory usage even on mutations
 
-**Why?** Because it makes Exlex incredibly cache-friendly. When the total number of properties in a section isn't massive, a flat linear search heavily outperforms a HashMap or BTree due to memory contiguity.
+## What it is and What it does not aim to be:
+- Built for hardware constraint environment.
+- Built to be Cache-friendly and Memory friendly as much as it can.
+- Built for overall speed in lifecycle of a program (Parse -> Read -> Mutate -> Save).
+- Syntax specifically designed to make parser fast while maintaining human readability
+- NOT a Feature rich syntax and high flexibility (Use json or toml).
+
+## Issues
+- Not production ready, Have bugs and possibly edge case critical issues
 
 ## Syntax
 ```exl
@@ -45,37 +56,18 @@ sect "Client" {
 }
 ```
 
-## Pros and Cons
-
-### Pros
-
-  - **Data-Oriented Design & Cache friendliness** (TLB Miss was 0.07% and IPC was 1.7)
-  - Support for `no_std`
-  - Extremely low memory usage
-  - SIMD acceleration on specific portions (Not the entire parser like `sonic-rs` or `simdjson` because that is too complex for me right now)
-  - Minimalistic syntax (modified specifically for maximum parsing performance)
-  - Lock-free data mutation via a separate arena
-  - High-performance Parsing and Writing
-
-### Cons
-
-  - **No inbuilt Datatype support:** I am trying to keep it minimalistic. I feel it's not worth adding that overhead directly into the parser, but the interface does provide ways to handle it.
-  - **No direct array support:** There is a workaround currently, but I am planning to implement native arrays later.
-
 ## Rules
 
 To retain high performance for config files, the following rules are imposed by the parser:
-
   - Quotes are enforced on all literals.
   - All properties must be defined *before* defining a nested section in a scope.
 
 -----
 
+*(Note: I wrote the core parser myself, but heavily utilized AI to help design and write this Benchmark).*
+
 ## Benchmarks
-
 **Benchmark Repo:** [Exlex-Benchmark](https://github.com/cychronex-labs/Exlex-Benchmark)
-
-*(Note: I wrote the core parser myself, but heavily utilized AI to help design and write this Benchmark Methodology).*
 
 ### 📊 Benchmark Methodology
 

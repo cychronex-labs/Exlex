@@ -20,9 +20,6 @@ pub struct Exlex<'a> {
     pub(crate) sections_hash: Vec<u64>,
     pub(crate) children_tracker: Vec<[usize; 2]>,
     pub(crate) parent_tracker: Vec<usize>,
-    // sections_name_spans: Vec<[usize; 2]>,
-    // prop_keys_spans: Vec<[usize; 2]>,
-    // prop_values_spans: Vec<[usize; 2]>
 }
 #[derive(Clone, Copy)]
 pub struct ExlexSection(pub usize);
@@ -44,9 +41,7 @@ impl<'a> Exlex<'a> {
             preallocate_props,
             preallocate_max_depth,
         );
-        parser.parse()?; // Run the state machine
-        // Handoff the memory arrays. The parser is destroyed, the memory lives on.
-
+        parser.parse()?;
         Ok(Exlex {
             sections: parser.sections,
             prop_keys: parser.prop_keys,
