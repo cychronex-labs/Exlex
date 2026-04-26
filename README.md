@@ -38,7 +38,7 @@ test proptest_mutator_engine ... ok
 test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 5.87s
 ```
 
-Quick Start (Rust API)
+## Quick Start (Rust API)
 Exlex splits its lifecycle into two distinct phases: an immutable, zero-copy Reader and an allocation-efficient Mutator.
 
 ```rust
@@ -239,6 +239,7 @@ I measured the hardware execution on an **Intel i3-6006U (Skylake, 2C/4T, 2.0GHz
 **Reasons**: 
 - DOD-based parsers usually don't offer data mutation; I do, and it is exceptionally fast.
 - Standard parsers default to HashMaps, but I use Linear Search. In usual configuration parsing, Linear scans outperforms Hashmap (in Intel Core i3 6006U, approx upto 65-75 properties). For continuous arrays of numbers, a linear search on a modern processor is incredibly fast.
+
 
 ### AI Usage
 - AI has not been used in the code of Exlex other than for debugging and verifying the code for edge cases

@@ -114,23 +114,18 @@ impl<'a> Exlex<'a> {
     /// * `child`  - The section that needs to be searched for (&str)
     /// * `parent` - The parent section which needs to be searched (ExlexSection)
     pub fn get_child(&self, child: &str, parent: ExlexSection) -> Result<ExlexSection> {
-        let parent_id = parent.0;
         let hashed_sect_name = hash(child);
-        let children_start = self.children_tracker[parent_id][0];
-        let children_slice =
-            &self.sections_hash[children_start..self.children_tracker[parent_id][1]];
+        let mut cursor = self.children_tracker[parent.0][0];
+        let end = self.children_tracker[parent.0][1];
 
-        let mut offset = 0;
-        while let Some(rel_idx) = children_slice[offset..]
-            .iter()
-            .position(|&sect_hash| hashed_sect_name == sect_hash)
-        {
-            let actual_idx = children_start + offset + rel_idx;
-            if self.sections[actual_idx] == child {
-                return Ok(ExlexSection(actual_idx));
+        while cursor < end {
+            if self.sections_hash[cursor] == hashed_sect_name && self.sections[cursor] == child {
+                return Ok(ExlexSection(cursor));
             }
-            offset += rel_idx + 1;
+            // Avoid all nested section and go to the next section.
+            cursor = self.children_tracker[cursor][1];
         }
+
         Err(ExlexError {
             code: ErrorCode::SectionNotFound,
             index: usize::MAX,

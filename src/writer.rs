@@ -48,7 +48,7 @@ pub struct ExlexMutator<'a, 'b> {
     updated_key_indices: Vec<usize>,
     // Old key sections
     updated_keys_section_ids: Vec<usize>,
-    // Includes KEYS OF CORE!
+
     dead_core_keys: Vec<bool>,
     dead_new_keys: Vec<bool>,
 
@@ -58,7 +58,7 @@ pub struct ExlexMutator<'a, 'b> {
     new_keys_section_ids: Vec<usize>,
     new_values: Vec<[usize; 2]>,
     // New sections
-    new_sections: Vec<&'a str>,
+    new_sections: Vec<[usize; 2]>,
     new_sections_hashes: Vec<u64>,
     new_sections_parent_ids: Vec<usize>,
     dead_sections: Vec<bool>,
@@ -140,7 +140,8 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
             .position(|&h| h == hashed_section)
         {
             let actual_idx = offset + rel_matched_idx;
-            if self.new_sections[actual_idx] == section_name
+            if &self.arena[self.new_sections[actual_idx][0]..self.new_sections[actual_idx][1]]
+                == section_name
                 && self.new_sections_parent_ids[actual_idx] == parent_id
             {
                 return actual_idx;
@@ -325,12 +326,10 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
         if sect_idx != 0 {
             write!(self.write_buffer, "sect \"").unwrap();
             if sect_idx >= self.core.sections.len() {
-                write!(
-                    self.write_buffer,
-                    "{}",
-                    self.new_sections[sect_idx - self.core.sections.len()]
-                )
-                .unwrap();
+                let sect_start = self.new_sections[sect_idx - self.core.sections.len()][0];
+                let sect_end = self.new_sections[sect_idx - self.core.sections.len()][1];
+                let section_name = &self.arena[sect_start..sect_end];
+                write!(self.write_buffer, "{}", section_name).unwrap();
             } else {
                 write!(self.write_buffer, "{}", self.core.sections[sect_idx]).unwrap();
             }
@@ -356,7 +355,7 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
             write!(self.write_buffer, "}}\n").unwrap();
         }
     }
-    pub fn new_section(&mut self, section_name: &'a str, parent: ExlexSection) -> Result<()> {
+    pub fn new_section(&mut self, section_name: &str, parent: ExlexSection) -> Result<()> {
         let parent_id = parent.0;
         if self.is_new_section(section_name, parent_id) != usize::MAX {
             Err(ExlexError {
@@ -370,7 +369,10 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
                     index: usize::MAX,
                 })
             } else {
-                self.new_sections.push(section_name);
+                let start = self.arena.len();
+                self.arena.push_str(section_name);
+                let end = self.arena.len();
+                self.new_sections.push([start, end]);
                 self.new_sections_hashes.push(hash(section_name));
                 self.parent_tracker.push(parent_id);
                 self.dead_sections.push(false);
