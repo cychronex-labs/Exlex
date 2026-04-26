@@ -355,7 +355,11 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
             write!(self.write_buffer, "}}\n").unwrap();
         }
     }
-    pub fn new_section(&mut self, section_name: &str, parent: ExlexSection) -> Result<()> {
+    pub fn new_section(
+        &mut self,
+        section_name: &str,
+        parent: ExlexSection,
+    ) -> Result<ExlexSection> {
         let parent_id = parent.0;
         if self.is_new_section(section_name, parent_id) != usize::MAX {
             Err(ExlexError {
@@ -377,7 +381,9 @@ impl<'a, 'b> ExlexMutator<'a, 'b> {
                 self.parent_tracker.push(parent_id);
                 self.dead_sections.push(false);
                 self.new_sections_parent_ids.push(parent_id);
-                Ok(())
+                Ok(ExlexSection(
+                    self.core.sections.len() + self.new_sections.len() - 1,
+                ))
             }
         }
     }
